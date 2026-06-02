@@ -23,17 +23,20 @@ app.add_middleware(
 # ==========================================
 # 2. KHỞI TẠO MÔ HÌNH TRÍ TUỆ NHÂN TẠO
 # ==========================================
-print("⏳ Đang nạp bộ não AI...")
-# MẸO: Hiện tại đang dùng 'yolov8n.pt' để test hệ thống chung.
-# Khi bạn làm dữ liệu xong, chỉ cần đổi thành 'best.pt' để nhận diện trái cây của đồ án.
-model = YOLO('yolov8n.pt')
+import os
+
+# Đường dẫn tuyệt đối động đến file best.pt
+current_dir = os.path.dirname(os.path.abspath(__file__))
+model_path = os.path.join(current_dir, 'best.pt')
+
+print(f"⏳ Đang nạp bộ não AI từ: {model_path}")
+model = YOLO(model_path)
 print("✅ Mô hình đã sẵn sàng nhận lệnh!")
 
 # Định nghĩa khuôn mẫu dữ liệu hứng từ Client gửi lên
-
-
 class ImageData(BaseModel):
     image_base64: str
+    confidence: float = 0.25
 
 # ==========================================
 # 3. CÁC ĐIỂM CẦU (ENDPOINTS)
@@ -62,9 +65,9 @@ async def predict_image(data: ImageData):
 
         # Bước 3: Đưa ảnh cho YOLO quét
         # - imgsz=640: Ép ảnh về kích thước chuẩn để tính toán nhanh
-        # - conf=0.25: Hạ ngưỡng tự tin xuống 25% để dễ dàng bắt dính vật thể trong video (chống motion blur)
+        # - conf=data.confidence: Sử dụng ngưỡng tự tin động từ client
         results = model.predict(source=img, imgsz=640,
-                                conf=0.25, verbose=False)
+                                conf=data.confidence, verbose=False)
 
         # Bước 4: Khai thác kết quả (Lấy tọa độ, độ tự tin, tên vật thể)
         detections = []

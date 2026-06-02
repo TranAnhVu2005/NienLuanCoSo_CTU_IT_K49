@@ -12,14 +12,19 @@ export interface AIResponse {
     message?: string;
 }
 
-const API_URL = 'http://localhost:8000/predict';
-
-export const analyzeImageAI = async (base64Image: string): Promise<AIResponse> => {
+export const analyzeImageAI = async (
+    base64Image: string,
+    apiUrl: string = 'http://localhost:8000/predict',
+    confidence: number = 0.25
+): Promise<AIResponse> => {
     try {
-        const response = await fetch(API_URL, {
+        const response = await fetch(apiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ image_base64: base64Image })
+            body: JSON.stringify({ 
+                image_base64: base64Image,
+                confidence: confidence
+            })
         });
         return await response.json();
     } catch (error) {
