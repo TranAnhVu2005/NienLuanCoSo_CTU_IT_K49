@@ -395,7 +395,7 @@ const App: React.FC = () => {
   // ==========================================
   return (
     <div className="flex flex-col min-h-screen text-slate-100 font-sans antialiased">
-      <Header pingStatus={pingStatus} onCheckPing={() => checkPingBackend(apiUrl)} />
+      <Header />
       
       <main className="flex-1 max-w-[1440px] w-full mx-auto p-4 md:p-6 lg:p-8 flex flex-col gap-6">
         

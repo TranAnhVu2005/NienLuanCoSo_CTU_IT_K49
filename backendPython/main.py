@@ -1,10 +1,10 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from ultralytics import YOLO
-import cv2
-import numpy as np
-import base64
+from fastapi import FastAPI #Framewok tạo api
+from fastapi.middleware.cors import CORSMiddleware #Cho phép ứng dụng frontend từ cổng khác gọi api
+from pydantic import BaseModel #Định nghĩa cấu trúc dữ liệu đầu vào và kiểm tra tính hợp lệ của dữ liệu gửi lên API
+from ultralytics import YOLO #Thư viện YOLO dùng để phát hiện vật thể
+import cv2 #Thư viện xử lý ảnh 
+import numpy as np #Thư viện tính toán ma trận
+import base64 #Thư viện mã hóa/giải mã base64
 
 # ==========================================
 # 1. KHỞI TẠO SERVER & CẤU HÌNH BẢO MẬT
@@ -14,10 +14,10 @@ app = FastAPI(title="YOLOv8 Detection API")
 # Cấu hình CORS: Cho phép Frontend (HTML/React) gọi API từ mọi nguồn (localhost, IP LAN)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=["*"], #Cho phép mọi trang web bất kì có thể gửi yêu cầu đến api này
+    allow_credentials=True, #Cho phép frontend gửi các thông tin nhạy cảm như cookie, authorization headers
+    allow_methods=["*"], #Cho phép các phương thức http như GET, POST, PUT, DELETE, ...
+    allow_headers=["*"], #Cho phép các headers tùy chỉnh
 )
 
 # ==========================================
@@ -26,12 +26,12 @@ app.add_middleware(
 import os
 
 # Đường dẫn tuyệt đối động đến file best.pt
-current_dir = os.path.dirname(os.path.abspath(__file__))
+current_dir = os.path.dirname(os.path.abspath(__file__)) #Lấy đường dẫn thư mục đang chạy file main.py
 model_path = os.path.join(current_dir, 'best.pt')
 
 print(f"⏳ Đang nạp bộ não AI từ: {model_path}")
 model = YOLO(model_path)
-print("✅ Mô hình đã sẵn sàng nhận lệnh!")
+print("Mô hình đã sẵn sàng nhận lệnh!")
 
 # Định nghĩa khuôn mẫu dữ liệu hứng từ Client gửi lên
 class ImageData(BaseModel):
@@ -41,8 +41,6 @@ class ImageData(BaseModel):
 # ==========================================
 # 3. CÁC ĐIỂM CẦU (ENDPOINTS)
 # ==========================================
-
-# Cổng chào hỏi (Dùng để gõ http://localhost:8000 vào trình duyệt test xem server có sống không)
 
 
 @app.get("/")
@@ -56,8 +54,7 @@ def read_root():
 async def predict_image(data: ImageData):
     try:
         # Bước 1: Làm sạch chuỗi Base64 (Cắt bỏ đoạn 'data:image/jpeg;base64,' nếu có)
-        encoded_data = data.image_base64.split(
-            ',')[1] if ',' in data.image_base64 else data.image_base64
+        encoded_data = data.image_base64.split(',')[1] if ',' in data.image_base64 else data.image_base64
 
         # Bước 2: Dịch ngược Base64 thành ma trận pixel cho thư viện OpenCV hiểu
         nparr = np.frombuffer(base64.b64decode(encoded_data), np.uint8)
