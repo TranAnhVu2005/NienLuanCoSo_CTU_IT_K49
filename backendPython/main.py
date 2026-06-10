@@ -29,7 +29,7 @@ import os
 current_dir = os.path.dirname(os.path.abspath(__file__)) #Lấy đường dẫn thư mục đang chạy file main.py
 model_path = os.path.join(current_dir, 'best.pt')
 
-print(f"⏳ Đang nạp bộ não AI từ: {model_path}")
+print(f"Đang nạp mô hình: {model_path}")
 model = YOLO(model_path)
 print("Mô hình đã sẵn sàng nhận lệnh!")
 

@@ -1,67 +1,181 @@
-import React, { type RefObject } from 'react';
+import React, { type RefObject, useState, useEffect } from 'react';
+import type { Detection } from '../services/aiService';
+import { getInfoForLabel } from '../utils/canvasHelper';
 
+// Khai báo các Props nhận vào cho màn hình quét Camera/Video/Ảnh
 interface CameraScreenProps {
-    videoRef: RefObject<HTMLVideoElement | null>;
-    canvasRef: RefObject<HTMLCanvasElement | null>;
-    mode: string;
+    videoRef: RefObject<HTMLVideoElement | null>; // Tham chiếu đến thẻ video ẩn dùng để stream camera/video
+    canvasRef: RefObject<HTMLCanvasElement | null>; // Tham chiếu đến canvas dùng để vẽ đè khung bounding box
+    mode: string; // Trạng thái hoạt động: 'idle', 'camera', 'image', 'video'
+    activeTab: 'static' | 'conveyor'; // Chế độ kiểm tra: 'static' (tĩnh) hoặc 'conveyor' (băng chuyền)
+    sensorLineY: number; // Tọa độ Y (%) của vạch cảm biến ảo đếm nông sản
+    detections: Detection[]; // Danh sách các vật thể được AI phát hiện trong khung hình hiện tại
+    conveyorTotal: number; // Tổng số nông sản đi qua băng chuyền
+    conveyorFresh: number; // Số lượng nông sản đạt chất lượng (Fresh) trên băng chuyền
 }
 
-const CameraScreen: React.FC<CameraScreenProps> = ({ videoRef, canvasRef, mode }) => {
+const CameraScreen: React.FC<CameraScreenProps> = ({
+    videoRef,
+    canvasRef,
+    mode,
+    activeTab,
+    sensorLineY,
+    detections,
+    conveyorTotal,
+    conveyorFresh
+}) => {
+    // Định nghĩa các state giả lập chỉ số hiển thị HUD (Heads-Up Display)
+    const [fps, setFps] = useState(60.2); // Tốc độ khung hình trên giây (FPS)
+    const [latency, setLatency] = useState(12); // Độ trễ xử lý AI (ms)
+    const [packageNum, setPackageNum] = useState(8291); // Mã số lô hàng đang xử lý
+
+    // Effect 1: Tạo dao động ngẫu nhiên cho FPS và Latency khi hệ thống đang quét để tăng tính thực tế cho giao diện
+    useEffect(() => {
+        if (mode === 'idle') return;
+        const interval = setInterval(() => {
+            setFps(+(59.6 + Math.random() * 0.8).toFixed(1));
+            setLatency(Math.floor(11 + Math.random() * 4));
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [mode]);
+
+    // Effect 2: Tự động tăng mã số lô hàng sau mỗi 6 giây khi đang quét
+    useEffect(() => {
+        if (mode === 'idle') return;
+        const interval = setInterval(() => {
+            setPackageNum(p => p + 1);
+        }, 6000);
+        return () => clearInterval(interval);
+    }, [mode]);
+
+    // Xác định màu sắc hiển thị cho huy hiệu trạng thái ở góc trên bên phải màn hình
+    const badgeColor =
+        mode === 'camera' ? 'var(--accent)' : // Màu xanh lá cho camera trực tiếp
+        mode === 'video' ? '#f59e0b' : 'var(--accent)'; // Màu cam cho video đang phát
+
+    // Tên nhãn trạng thái tương ứng
+    const badgeLabel =
+        mode === 'camera' ? 'Live feed' :
+        mode === 'video' ? 'Playing video' :
+        'Still image';
+
+    // Tính toán tỷ lệ phần trăm chất lượng đạt (Pass Rate) cho biểu đồ xu hướng (Trend Chart)
+    const totalCurrent = detections.length;
+    // Lọc ra các vật thể tươi (Fresh) trong danh sách phát hiện hiện tại
+    const freshCurrent = detections.filter(d => {
+        const info = getInfoForLabel(d.label.toString());
+        return !info.labelEn.toLowerCase().includes('rotten');
+    }).length;
+
+    const isConveyor = activeTab === 'conveyor';
+    // Lấy tổng số lượng và số lượng tươi dựa trên chế độ đang chọn (băng chuyền hay quét tĩnh)
+    const totalToShow = isConveyor ? conveyorTotal : totalCurrent;
+    const freshToShow = isConveyor ? conveyorFresh : freshCurrent;
+
+    // Tính toán điểm số chất lượng (tỷ lệ tươi / tổng số)
+    let qualityScoreToShow = 100;
+    if (totalToShow > 0) {
+        qualityScoreToShow = Math.round((freshToShow / totalToShow) * 100);
+    }
+
+    // Dữ liệu chiều cao cột đồ thị giả lập hiển thị lịch sử xu hướng chất lượng trước đó
+    const trendHeights = [80, 85, 90, 82, 88, 92, 94];
+
     return (
-        <div className="flex flex-col items-center justify-center bg-slate-950 rounded-2xl overflow-hidden min-h-[440px] border-4 border-gray-800 shadow-2xl relative w-full group">
-            
-            {/* Lớp phủ lưới công nghệ cao (HUD Grid overlay) */}
-            <div className="absolute inset-0 bg-[linear-gradient(rgba(18,24,38,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(18,24,38,0.1)_1px,transparent_1px)] bg-[size:20px_20px] pointer-events-none z-20"></div>
+        <div className="flex-1 flex flex-col gap-[1.25rem]">
+            <div className="bg-bg-surface border border-border-color rounded-lg p-[1.25rem] shadow-card transition-colors duration-300">
+                <div className="relative w-full rounded-lg overflow-hidden bg-black aspect-[4/3] flex items-center justify-center border border-border-color shadow-lg lg:aspect-auto lg:h-[600px]">
+                    {/* HUD Top Left Pills */}
+                    {mode !== 'idle' && (
+                        <div className="absolute top-4 left-4 flex gap-2 z-5">
+                            <div className="px-2.5 py-1 rounded-sm bg-slate-900/75 backdrop-blur-[4px] text-white font-mono text-[0.72rem] font-bold tracking-wider border border-white/10">FPS: {fps}</div>
+                            <div className="px-2.5 py-1 rounded-sm bg-slate-900/75 backdrop-blur-[4px] text-white font-mono text-[0.72rem] font-bold tracking-wider border border-white/10">LATENCY: {latency}ms</div>
+                        </div>
+                    )}
 
-            {/* Khung góc HUD trang trí công nghệ cao */}
-            <div className="absolute top-4 left-4 w-4 h-4 border-t-2 border-l-2 border-emerald-500/60 pointer-events-none z-20"></div>
-            <div className="absolute top-4 right-4 w-4 h-4 border-t-2 border-r-2 border-emerald-500/60 pointer-events-none z-20"></div>
-            <div className="absolute bottom-4 left-4 w-4 h-4 border-b-2 border-l-2 border-emerald-500/60 pointer-events-none z-20"></div>
-            <div className="absolute bottom-4 right-4 w-4 h-4 border-b-2 border-r-2 border-emerald-500/60 pointer-events-none z-20"></div>
+                    {/* Conveyor Virtual Sensor Line */}
+                    {activeTab === 'conveyor' && mode !== 'idle' && (
+                        <div
+                            className="absolute left-0 right-0 h-[2px] border-t-2 border-dashed border-[#f59e0b] z-3 pointer-events-none shadow-[0_0_8px_rgba(245,158,11,0.5)]"
+                            style={{ top: `${sensorLineY}%` }}
+                        >
+                            <span className="absolute right-4 -translate-y-1/2 bg-[#f59e0b] text-black text-[0.65rem] font-bold uppercase px-[0.4rem] py-[0.1rem] rounded-sm tracking-widest">count line</span>
+                        </div>
+                    )}
 
-            {/* Video gốc chạy ngầm, luôn bị ẩn */}
-            <video ref={videoRef} autoPlay playsInline muted className="hidden" />
+                    {/* Hidden HTML Video Tag and Render Canvas */}
+                    <video ref={videoRef} autoPlay playsInline muted className="hidden" />
+                    <canvas 
+                        ref={canvasRef} 
+                        className={mode === 'idle' ? 'hidden' : 'max-w-full max-h-full object-contain z-1'} 
+                    />
 
-            {/* Canvas đè lên trên để vẽ đồ họa */}
-            <canvas ref={canvasRef} className="max-w-full max-h-[560px] object-contain z-10 block" />
+                    {/* Top Right Viewport Status Badge */}
+                    {mode !== 'idle' && (
+                        <div className="absolute top-4 right-4 z-5 bg-slate-900/75 backdrop-blur-[4px] text-white px-2.5 py-1 rounded-sm text-[0.75rem] font-semibold flex items-center gap-[0.35rem] border border-white/10">
+                            <span
+                                className="w-1.5 h-1.5 rounded-full"
+                                style={{ backgroundColor: badgeColor }}
+                            />
+                            <span>{badgeLabel}</span>
+                        </div>
+                    )}
 
-            {/* Nhãn trạng thái hiển thị góc màn hình (HUD Status) */}
-            {mode !== 'idle' && (
-                <div className="absolute top-4 left-4 z-20 flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
-                    <span className={`w-2.5 h-2.5 rounded-full animate-ping ${
-                        mode === 'camera' ? 'bg-rose-500' :
-                        mode === 'video' ? 'bg-amber-500' : 'bg-blue-500'
-                    }`}></span>
-                    <span className={`w-2.5 h-2.5 rounded-full absolute ${
-                        mode === 'camera' ? 'bg-rose-500' :
-                        mode === 'video' ? 'bg-amber-500' : 'bg-blue-500'
-                    }`}></span>
-                    <span className="text-[10px] font-bold font-mono tracking-wider text-gray-200 uppercase">
-                        {mode === 'camera' ? 'LIVE CAMERA' :
-                         mode === 'video' ? 'PROCESSING VIDEO' :
-                         'IMAGE ANALYZED'}
-                    </span>
+                    {/* HUD Bottom Package Processing Banner */}
+                    {mode !== 'idle' && (
+                        <div className="absolute bottom-4 left-4 right-4 bg-slate-900/85 backdrop-blur-[8px] rounded-md px-4 py-[0.65rem] z-5 flex flex-col gap-1.5 border border-white/10">
+                            <div className="text-white font-semibold text-[0.82rem] flex justify-between">
+                                <span>Processing package #{packageNum}</span>
+                                <span>{activeTab === 'conveyor' ? 'Belt Mode' : 'Static Mode'}</span>
+                            </div>
+                            <div className="h-1 bg-white/20 rounded-full overflow-hidden">
+                                <div className="h-full bg-accent w-0 transition-[width] duration-300 animate-hud-loader" />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Viewport Idle State */}
+                    {mode === 'idle' && (
+                        <div className="flex flex-col items-center justify-center text-center p-8 text-text-muted">
+                            <svg className="w-12 h-12 text-accent mb-3 opacity-80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                                <circle cx="12" cy="13" r="4"/>
+                            </svg>
+                            <h4 className="text-white font-semibold text-[1.1rem] mb-1">Ready when you are</h4>
+                            <p className="text-[0.84rem] max-w-[280px] leading-relaxed m-0">
+                                Bật Camera live hoặc đăng tải một bức ảnh/video để phân tích chất lượng nông sản.
+                            </p>
+                        </div>
+                    )}
                 </div>
-            )}
+            </div>
 
-            {/* Lớp phủ màn hình chờ khi hệ thống chưa bật */}
-            {mode === 'idle' && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-950/95 z-30 px-6 text-center">
-                    {/* Biểu tượng ống kính Camera kết hợp vòng quét radar */}
-                    <div className="relative flex items-center justify-center w-20 h-20 rounded-full border-2 border-dashed border-gray-700 mb-5 text-gray-600">
-                        <div className="absolute inset-2 rounded-full bg-gray-900 border border-gray-800 flex items-center justify-center">
-                            <span className="text-3xl">📹</span>
+            {/* QUALITY TREND CARD */}
+            <div className="bg-bg-surface border border-border-color rounded-lg p-[1.25rem] shadow-card transition-colors duration-300 mt-1">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="flex items-center font-display text-base font-bold text-text-primary pl-[0.65rem] border-l-3 border-accent m-0">Quality Trend (Last 5 mins)</h3>
+                    <div className="flex items-center gap-[0.35rem] text-[0.78rem] text-text-secondary font-semibold">
+                        <span className="w-2 h-2 rounded-full bg-accent" />
+                        <span>Pass Rate</span>
+                    </div>
+                </div>
+
+                <div className="flex items-end justify-between h-20 pt-2.5 gap-1.5">
+                    {trendHeights.map((h, i) => (
+                        <div key={i} className="flex-1 flex flex-col items-center h-full">
+                            <div className="w-full bg-bg-muted rounded-t-[4px] relative overflow-hidden h-full">
+                                <div className="absolute bottom-0 left-0 right-0 bg-accent-glow border-t-2 border-accent transition-[height] duration-500" style={{ height: `${h}%` }} />
+                            </div>
+                        </div>
+                    ))}
+                    {/* Active Bar */}
+                    <div className="flex-1 flex flex-col items-center h-full">
+                        <div className="w-full bg-bg-muted rounded-t-[4px] relative overflow-hidden h-full">
+                            <div className="absolute bottom-0 left-0 right-0 bg-accent transition-[height] duration-500" style={{ height: `${totalToShow > 0 ? qualityScoreToShow : 95}%` }} />
                         </div>
                     </div>
-                    
-                    <h4 className="text-gray-300 font-extrabold tracking-wide uppercase text-sm">
-                        Màn Hình Giám Sát AI
-                    </h4>
-                    <p className="text-gray-500 text-xs mt-2 max-w-sm leading-relaxed">
-                        Vui lòng kích hoạt camera trực tiếp hoặc tải lên tập tin (ảnh/video) ở bảng điều khiển để bắt đầu quét nông sản.
-                    </p>
                 </div>
-            )}
+            </div>
         </div>
     );
 };
