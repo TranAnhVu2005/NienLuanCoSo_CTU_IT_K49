@@ -25,7 +25,7 @@ app.add_middleware(
 # ==========================================
 import os
 
-# Đường dẫn tuyệt đối động đến file best.pt
+# Đường dẫn tuyệt đối động đến file yolo26n.pt
 current_dir = os.path.dirname(os.path.abspath(__file__)) #Lấy đường dẫn thư mục đang chạy file main.py
 model_path = os.path.join(current_dir, 'best.pt')
 
@@ -37,6 +37,7 @@ print("Mô hình đã sẵn sàng nhận lệnh!")
 class ImageData(BaseModel):
     image_base64: str
     confidence: float = 0.25
+    track: bool = False # Thêm tùy chọn theo vết đối tượng (YOLOv11 tracking)
 
 # ==========================================
 # 3. CÁC ĐIỂM CẦU (ENDPOINTS)
@@ -45,7 +46,7 @@ class ImageData(BaseModel):
 
 @app.get("/")
 def read_root():
-    return {"status": "online", "message": "Server API YOLOv8 đang hoạt động cực kỳ mượt mà!"}
+    return {"status": "online", "message": "Server API YOLOv8/v11 đang hoạt động cực kỳ mượt mà!"}
 
 # Cổng tiếp nhận ảnh và xử lý AI
 
@@ -63,8 +64,14 @@ async def predict_image(data: ImageData):
         # Bước 3: Đưa ảnh cho YOLO quét
         # - imgsz=640: Ép ảnh về kích thước chuẩn để tính toán nhanh
         # - conf=data.confidence: Sử dụng ngưỡng tự tin động từ client
-        results = model.predict(source=img, imgsz=640,
-                                conf=data.confidence, verbose=False)
+        # - Nếu data.track=True: Gọi model.track để theo vết đối tượng qua từng khung hình (YOLOv11)
+        # - Nếu data.track=False: Gọi model.predict thông thường
+        if data.track:
+            results = model.track(source=img, imgsz=640,
+                                  conf=data.confidence, persist=True, verbose=False)
+        else:
+            results = model.predict(source=img, imgsz=640,
+                                    conf=data.confidence, verbose=False)
 
         # Bước 4: Khai thác kết quả (Lấy tọa độ, độ tự tin, tên vật thể)
         detections = []
@@ -75,9 +82,13 @@ async def predict_image(data: ImageData):
             cls = int(box.cls[0])                           # Mã số ID của nhãn
             # Tên nhãn (người, điện thoại, quả cam...)
             name = results[0].names[cls]
+            
+            # Lấy track_id của đối tượng khi sử dụng model.track (YOLOv11 tracking)
+            track_id = int(box.id[0].item()) if (box.id is not None) else None
 
             # Đóng gói dữ liệu lại
             detections.append({
+                "id": track_id,
                 "label": name,
                 "confidence": round(conf, 2),
                 "box": [x1, y1, x2, y2]

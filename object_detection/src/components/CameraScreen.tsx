@@ -51,13 +51,13 @@ const CameraScreen: React.FC<CameraScreenProps> = ({
     // Xác định màu sắc hiển thị cho huy hiệu trạng thái ở góc trên bên phải màn hình
     const badgeColor =
         mode === 'camera' ? 'var(--accent)' : // Màu xanh lá cho camera trực tiếp
-        mode === 'video' ? '#f59e0b' : 'var(--accent)'; // Màu cam cho video đang phát
+            mode === 'video' ? '#f59e0b' : 'var(--accent)'; // Màu cam cho video đang phát
 
     // Tên nhãn trạng thái tương ứng
     const badgeLabel =
         mode === 'camera' ? 'Live feed' :
-        mode === 'video' ? 'Playing video' :
-        'Still image';
+            mode === 'video' ? 'Playing video' :
+                'Still image';
 
     // Tính toán tỷ lệ phần trăm chất lượng đạt (Pass Rate) cho biểu đồ xu hướng (Trend Chart)
     const totalCurrent = detections.length;
@@ -93,21 +93,13 @@ const CameraScreen: React.FC<CameraScreenProps> = ({
                         </div>
                     )}
 
-                    {/* Conveyor Virtual Sensor Line */}
-                    {activeTab === 'conveyor' && mode !== 'idle' && (
-                        <div
-                            className="absolute left-0 right-0 h-[2px] border-t-2 border-dashed border-[#f59e0b] z-3 pointer-events-none shadow-[0_0_8px_rgba(245,158,11,0.5)]"
-                            style={{ top: `${sensorLineY}%` }}
-                        >
-                            <span className="absolute right-4 -translate-y-1/2 bg-[#f59e0b] text-black text-[0.65rem] font-bold uppercase px-[0.4rem] py-[0.1rem] rounded-sm tracking-widest">count line</span>
-                        </div>
-                    )}
+
 
                     {/* Hidden HTML Video Tag and Render Canvas */}
                     <video ref={videoRef} autoPlay playsInline muted className="hidden" />
-                    <canvas 
-                        ref={canvasRef} 
-                        className={mode === 'idle' ? 'hidden' : 'max-w-full max-h-full object-contain z-1'} 
+                    <canvas
+                        ref={canvasRef}
+                        className={mode === 'idle' ? 'hidden' : 'max-w-full max-h-full object-contain z-1'}
                     />
 
                     {/* Top Right Viewport Status Badge */}
@@ -138,8 +130,8 @@ const CameraScreen: React.FC<CameraScreenProps> = ({
                     {mode === 'idle' && (
                         <div className="flex flex-col items-center justify-center text-center p-8 text-text-muted">
                             <svg className="w-12 h-12 text-accent mb-3 opacity-80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                                <circle cx="12" cy="13" r="4"/>
+                                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                                <circle cx="12" cy="13" r="4" />
                             </svg>
                             <h4 className="text-white font-semibold text-[1.1rem] mb-1">Ready when you are</h4>
                             <p className="text-[0.84rem] max-w-[280px] leading-relaxed m-0">
@@ -147,33 +139,6 @@ const CameraScreen: React.FC<CameraScreenProps> = ({
                             </p>
                         </div>
                     )}
-                </div>
-            </div>
-
-            {/* QUALITY TREND CARD */}
-            <div className="bg-bg-surface border border-border-color rounded-lg p-[1.25rem] shadow-card transition-colors duration-300 mt-1">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="flex items-center font-display text-base font-bold text-text-primary pl-[0.65rem] border-l-3 border-accent m-0">Quality Trend (Last 5 mins)</h3>
-                    <div className="flex items-center gap-[0.35rem] text-[0.78rem] text-text-secondary font-semibold">
-                        <span className="w-2 h-2 rounded-full bg-accent" />
-                        <span>Pass Rate</span>
-                    </div>
-                </div>
-
-                <div className="flex items-end justify-between h-20 pt-2.5 gap-1.5">
-                    {trendHeights.map((h, i) => (
-                        <div key={i} className="flex-1 flex flex-col items-center h-full">
-                            <div className="w-full bg-bg-muted rounded-t-[4px] relative overflow-hidden h-full">
-                                <div className="absolute bottom-0 left-0 right-0 bg-accent-glow border-t-2 border-accent transition-[height] duration-500" style={{ height: `${h}%` }} />
-                            </div>
-                        </div>
-                    ))}
-                    {/* Active Bar */}
-                    <div className="flex-1 flex flex-col items-center h-full">
-                        <div className="w-full bg-bg-muted rounded-t-[4px] relative overflow-hidden h-full">
-                            <div className="absolute bottom-0 left-0 right-0 bg-accent transition-[height] duration-500" style={{ height: `${totalToShow > 0 ? qualityScoreToShow : 95}%` }} />
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>

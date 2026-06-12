@@ -5,6 +5,7 @@ import Header from './components/Header';
 import ControlPanel from './components/ControlPanel';
 import CameraScreen from './components/CameraScreen';
 import StatsDashboard from './components/StatsDashboard';
+import BodyBackground from './assets/img/bodyBackground.jpg';
 
 // Import các Hàm hỗ trợ
 import { analyzeImageAI } from './services/aiService';
@@ -69,6 +70,8 @@ const App: React.FC = () => {
   const animationFrameId = useRef<number | null>(null); // Quản lý ID của requestAnimationFrame để hủy vòng lặp khi dừng
   const streamRef = useRef<MediaStream | null>(null); // Lưu trữ stream webcam để giải phóng camera khi tắt
   const currentDetections = useRef<Detection[]>([]); // Bộ nhớ đệm lưu trữ danh sách nhận dạng mới nhất tránh lag giật đồ họa
+  const previousPositions = useRef<Record<number, { x: number; y: number }>>({}); // Lưu vị trí (X, Y) khung hình trước của ID vật thể
+  const countedIds = useRef<Set<number>>(new Set()); // Lưu tập hợp ID đã được đếm tránh đếm trùng
 
   // ==========================================
   // 2. HIỆU ỨNG TỰ ĐỘNG & ĐỒNG BỘ LOCAL STORAGE
@@ -85,42 +88,8 @@ const App: React.FC = () => {
     return () => stopAll();
   }, []);
 
-  // Effect chạy giả lập băng tải khi người dùng chuyển sang Tab "On the Belt"
-  useEffect(() => {
-    if (activeTab !== 'conveyor' || mode === 'idle') return;
+  // Chế độ băng tải sẽ đếm trực tiếp từ kết quả YOLOv11 tracking qua vạch ảo, không chạy bộ sinh ngẫu nhiên nữa
 
-    // Chu kỳ xuất hiện nông sản mới chạy qua băng tải dựa vào cài đặt tốc độ (Speed từ 0.1m/s đến 2.0m/s)
-    const intervalTime = Math.max(600, 3000 - conveyorSpeed * 1000);
-    const interval = setInterval(() => {
-      const items = ['Roma Tomato', 'Sweet Orange', 'Fuji Apple', 'Capsicum'];
-      const randomItem = items[Math.floor(Math.random() * items.length)];
-      const isRotten = Math.random() < 0.12; // Xác suất hỏng giả lập 12% để kiểm định
-
-      // Cập nhật các bộ đếm số lượng băng chuyền
-      setConveyorTotal(prev => {
-        if (isRotten) {
-          setConveyorRotten(r => r + 1);
-        } else {
-          setConveyorFresh(f => f + 1);
-        }
-        return prev + 1;
-      });
-
-      // Tạo một log ghi nhận việc nông sản đi qua vạch ảo của băng tải
-      setLogs(prev => {
-        const newLog: LogItem = {
-          id: `${Date.now()}-${Math.random()}`,
-          name: isRotten ? `${randomItem} (Defect)` : randomItem,
-          time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-          frame: Math.floor(Math.random() * 400) + 1200,
-          isPass: !isRotten
-        };
-        return [newLog, ...prev].slice(0, 20); // Giữ tối đa 20 bản ghi log mới nhất
-      });
-    }, intervalTime);
-
-    return () => clearInterval(interval);
-  }, [activeTab, mode, conveyorSpeed]);
 
   // Effect cập nhật nhật ký hoạt động tự động khi phát hiện vật thể tĩnh (Webcam/Ảnh tải lên)
   useEffect(() => {
@@ -155,6 +124,8 @@ const App: React.FC = () => {
     setConveyorFresh(0);
     setConveyorRotten(0);
     setLogs([]);
+    previousPositions.current = {};
+    countedIds.current.clear();
   };
 
   // Hàm chụp ảnh màn hình canvas hiện tại (bao gồm khung hình gốc và bounding box vẽ đè)
@@ -202,6 +173,10 @@ const App: React.FC = () => {
     setStatus({ type: 'idle', text: "Quét đã dừng." });
     setActiveDetections([]);
     currentDetections.current = [];
+
+    // Giải phóng bộ nhớ đệm theo vết
+    previousPositions.current = {};
+    countedIds.current.clear();
 
     // Xóa sạch hình vẽ cũ trên canvas
     if (canvasRef.current) {
@@ -348,6 +323,28 @@ const App: React.FC = () => {
 
         // Bước 3: Vẽ các hộp bounding box và nhãn chất lượng của các vật thể từ dữ liệu đệm nhận diện mới nhất
         drawBoundingBoxes(ctx, canvas, currentDetections.current);
+
+        // Bước 4: Vẽ vạch đếm chéo màu đỏ dọc theo máng trượt (khi ở chế độ băng chuyền)
+        if (activeTab === 'conveyor') {
+          const x1 = canvas.width * 0.08;
+          const y1 = canvas.height * 0.82;
+          const x2 = canvas.width * 0.60;
+          const y2 = canvas.height * 0.42;
+
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.strokeStyle = '#EF4444'; // Đường màu đỏ như mô tả
+          ctx.lineWidth = 4;
+          ctx.setLineDash([6, 6]); // Đường đứt nét
+          ctx.stroke();
+          ctx.setLineDash([]); // Khôi phục nét liền
+
+          // Vẽ chữ nhãn vạch đếm
+          ctx.fillStyle = '#EF4444';
+          ctx.font = 'bold 14px system-ui, sans-serif';
+          ctx.fillText('COUNT LINE', x2 + 10, y2);
+        }
       }
     }
 
@@ -355,10 +352,79 @@ const App: React.FC = () => {
     animationFrameId.current = requestAnimationFrame(processContinuousFrame);
   };
 
+  // Hàm xử lý đếm sản phẩm băng tải thực tế dựa trên YOLOv11 tracker ID và vạch chéo ảo
+  const processConveyorCounting = (detections: Detection[]) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    // Tọa độ vạch đếm chéo
+    const x1 = canvas.width * 0.08;
+    const y1 = canvas.height * 0.82;
+    const x2 = canvas.width * 0.60;
+    const y2 = canvas.height * 0.42;
+
+    // Hàm xác định phía của điểm (x, y) so với đường thẳng đi qua (x1, y1) và (x2, y2)
+    const getSide = (x: number, y: number) => {
+      return (x2 - x1) * (y - y1) - (y2 - y1) * (x - x1);
+    };
+
+    detections.forEach(det => {
+      const id = det.id;
+      // Chỉ đếm khi có ID hợp lệ từ YOLOv11 tracker
+      if (id === undefined || id === null) return;
+
+      const [rx1, ry1, rx2, ry2] = det.box;
+      const centerX = (rx1 + rx2) / 2;
+      const centerY = (ry1 + ry2) / 2;
+      const prevPos = previousPositions.current[id];
+
+      if (prevPos !== undefined) {
+        const prevSide = getSide(prevPos.x, prevPos.y);
+        const currSide = getSide(centerX, centerY);
+
+        // Kiểm tra xem vật thể có cắt qua vạch chéo trong giới hạn trục X của vạch không
+        const crossed = (prevSide * currSide < 0) && (centerX >= Math.min(x1, x2) && centerX <= Math.max(x1, x2));
+
+        if (crossed && !countedIds.current.has(id)) {
+          // Ghi nhận ID đã được đếm để không đếm trùng
+          countedIds.current.add(id);
+
+          const isRotten = det.label.toLowerCase().includes('rotten');
+          const cleanName = det.label
+            .replace(/_/g, ' ')
+            .replace(/\b\w/g, c => c.toUpperCase()); // Format nhãn dạng CamelCase
+
+          // Cập nhật bộ đếm
+          setConveyorTotal(prev => prev + 1);
+          if (isRotten) {
+            setConveyorRotten(prev => prev + 1);
+          } else {
+            setConveyorFresh(prev => prev + 1);
+          }
+
+          // Thêm ghi nhận vào danh sách logs thời gian thực
+          setLogs(prev => {
+            const newLog: LogItem = {
+              id: `${Date.now()}-${id}-${Math.random()}`,
+              name: `${cleanName} #${id}`,
+              time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+              frame: Math.floor(Math.random() * 200) + 100,
+              isPass: !isRotten
+            };
+            return [newLog, ...prev].slice(0, 20); // Lưu giữ 20 dòng log mới nhất
+          });
+        }
+      }
+
+      // Cập nhật vị trí hiện tại
+      previousPositions.current[id] = { x: centerX, y: centerY };
+    });
+  };
+
   // Hàm xử lý việc gọi API gửi ảnh sang Backend nhận kết quả
   const handleFetchPredict = async (base64Image: string, isStaticImage: boolean) => {
-    // Gọi hàm phân tích truyền kèm API URL cấu hình và mức confidence đã thiết lập
-    const result = await analyzeImageAI(base64Image, apiUrl, confidence);
+    // Gọi hàm phân tích truyền kèm API URL cấu hình và mức confidence đã thiết lập, cùng với cờ track (true khi ở tab conveyor)
+    const result = await analyzeImageAI(base64Image, apiUrl, confidence, activeTab === 'conveyor');
 
     // Chốt chặn kiểm tra: Nếu trong quá trình fetch API kéo dài mà người dùng bấm dừng quét, bỏ qua kết quả này
     if (!isRunning.current) {
@@ -369,6 +435,11 @@ const App: React.FC = () => {
     if (result.status === "success" && result.detections) {
       // Lưu kết quả nhận diện vào state activeDetections để đồng bộ UI (metrics, logs)
       setActiveDetections(result.detections);
+
+      if (activeTab === 'conveyor') {
+        // Thực hiện thuật toán đếm thực tế khi ở chế độ băng chuyền
+        processConveyorCounting(result.detections);
+      }
 
       if (isStaticImage && canvasRef.current) {
         // Đối với ảnh tĩnh vẽ một lần cố định duy nhất
@@ -394,12 +465,20 @@ const App: React.FC = () => {
   // 6. LẮP RÁP BỐ CỤC DASHBOARD CHÍNH
   // ==========================================
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden">
+    <div 
+      className="flex flex-col h-screen w-screen overflow-hidden relative bg-cover bg-center bg-no-repeat transition-colors duration-300"
+      style={{ backgroundImage: `url(${BodyBackground})` }}
+    >
+      {/* Background Overlay to ensure readability and support light/dark mode */}
+      <div className="absolute inset-0 bg-bg-base/85 backdrop-blur-[2px] transition-colors duration-300 z-0"></div>
+
       {/* TOP HEADER BAR */}
-      <Header />
+      <div className="relative z-10">
+        <Header />
+      </div>
 
       {/* MAIN LAYOUT CONTAINER */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+      <div className="flex-1 flex flex-col h-full overflow-hidden relative z-10">
         <main className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
           {/* Static (Still Life) vs Conveyor (On the Belt) Mode Toggles */}
           <div className="flex bg-bg-muted rounded-md p-1 w-max border border-border-color">

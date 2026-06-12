@@ -80,8 +80,9 @@ export const drawBoundingBoxes = (
         
         // Lấy thông tin hiển thị của lớp tương ứng (màu sắc, nhãn Tiếng Anh/Tiếng Việt)
         const info = getInfoForLabel(det.label);
-        // Nhãn văn bản hiển thị trên màn hình: Tên vật thể + Tỉ lệ tin cậy %
-        const text = `${info.labelEn} ${Math.round(det.confidence * 100)}%`;
+        // Nhãn văn bản hiển thị trên màn hình: Tên vật thể + #[ID] (nếu có) + Tỉ lệ tin cậy %
+        const idSuffix = (det.id !== undefined && det.id !== null) ? ` #${det.id}` : "";
+        const text = `${info.labelEn}${idSuffix} ${Math.round(det.confidence * 100)}%`;
         // Tính tỉ lệ co giãn scale của canvas so với kích thước gốc 640 từ server để vẽ đúng vị trí tỷ lệ
         const scale = canvas.width / 640;
 
